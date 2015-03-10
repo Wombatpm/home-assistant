@@ -11,7 +11,6 @@ DEPENDENCIES = []
 SERVICE_BROWSE_URL = "browse_url"
 
 
-# pylint: disable=unused-argument
 def setup(hass, config):
     """ Listen for browse_url events and open
         the url in the default webbrowser. """
@@ -21,7 +20,7 @@ def setup(hass, config):
     hass.services.register(DOMAIN, SERVICE_BROWSE_URL,
                            lambda service:
                            webbrowser.open(
-                               service.data.get('url',
-                                                'https://www.google.com')))
+                               service.data.get(
+                                   'url', 'https://www.google.com')))
 
     return True

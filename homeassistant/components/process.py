@@ -1,28 +1,16 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# -*- Python -*-
-#
-# $Id: process.py $
-#
-# Author: Markus Stenberg <fingon@iki.fi>
-#
-# Copyright (c) 2014 Markus Stenberg
-#
-# Created:       Wed Apr 23 23:33:26 2014 mstenber
-# Last modified: Thu Apr 24 17:13:04 2014 mstenber
-# Edit time:     19 min
-#
 """
 homeassistant.components.process
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Provides functionality to watch for specific processes running
 on the host machine.
+
+Author: Markus Stenberg <fingon@iki.fi>
 """
 
 import os
 
-from homeassistant.components import STATE_ON, STATE_OFF
+from homeassistant.const import STATE_ON, STATE_OFF
 import homeassistant.util as util
 
 DOMAIN = 'process'
@@ -42,7 +30,6 @@ def setup(hass, config):
     entities = {ENTITY_ID_FORMAT.format(util.slugify(pname)): pstring
                 for pname, pstring in config[DOMAIN].items()}
 
-    # pylint: disable=unused-argument
     def update_process_states(time):
         """ Check ps for currently running processes and update states. """
         with os.popen(PS_STRING, 'r') as psfile:

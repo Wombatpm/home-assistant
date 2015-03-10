@@ -1,50 +1,154 @@
 """ Starts home assistant. """
+from __future__ import print_function
 
 import sys
 import os
-
-try:
-    from homeassistant import bootstrap
-
-except ImportError:
-    # This is to add support to load Home Assistant using
-    # `python3 homeassistant` instead of `python3 -m homeassistant`
-
-    # Insert the parent directory of this file into the module search path
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-    from homeassistant import bootstrap
+import argparse
+import importlib
 
 
-ARG_RUN_TESTS = "--run-tests"
-ARG_DOCKER = '--docker'
+def validate_python():
+    """ Validate we're running the right Python version. """
+    major, minor = sys.version_info[:2]
+
+    if major < 3 or (major == 3 and minor < 4):
+        print("Home Assistant requires atleast Python 3.4")
+        sys.exit()
 
 
-def main():
-    """ Starts Home Assistant. Will create demo config if no config found. """
+def validate_dependencies():
+    """ Validate all dependencies that HA uses. """
+    import_fail = False
 
-    # Do we want to run the tests?
-    if ARG_RUN_TESTS in sys.argv:
-        sys.argv.remove(ARG_RUN_TESTS)
+    for module in ['requests']:
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            import_fail = True
+            print(
+                'Fatal Error: Unable to find dependency {}'.format(module))
 
-        import unittest
+    if import_fail:
+        print(("Install dependencies by running: "
+               "pip3 install -r requirements.txt"))
+        sys.exit()
 
-        unittest.main(module='homeassistant.test')
 
-    # Within Docker we load the config from a different path
-    if ARG_DOCKER in sys.argv:
-        config_path = '/config/home-assistant.conf'
-    else:
-        config_path = 'config/home-assistant.conf'
+def ensure_path_and_load_bootstrap():
+    """ Ensure sys load path is correct and load Home Assistant bootstrap. """
+    try:
+        from homeassistant import bootstrap
+
+    except ImportError:
+        # This is to add support to load Home Assistant using
+        # `python3 homeassistant` instead of `python3 -m homeassistant`
+
+        # Insert the parent directory of this file into the module search path
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+        from homeassistant import bootstrap
+
+    return bootstrap
+
+
+def validate_git_submodules():
+    """ Validate the git submodules are cloned. """
+    try:
+        # pylint: disable=no-name-in-module, unused-variable
+        from homeassistant.external.noop import WORKING  # noqa
+    except ImportError:
+        print("Repository submodules have not been initialized")
+        print("Please run: git submodule update --init --recursive")
+        sys.exit()
+
+
+def ensure_config_path(config_dir):
+    """ Gets the path to the configuration file.
+        Creates one if it not exists. """
+
+    # Test if configuration directory exists
+    if not os.path.isdir(config_dir):
+        print(('Fatal Error: Unable to find specified configuration '
+               'directory {} ').format(config_dir))
+        sys.exit()
+
+    # Try to use yaml configuration first
+    config_path = os.path.join(config_dir, 'configuration.yaml')
+    if not os.path.isfile(config_path):
+        config_path = os.path.join(config_dir, 'home-assistant.conf')
 
     # Ensure a config file exists to make first time usage easier
     if not os.path.isfile(config_path):
-        with open(config_path, 'w') as conf:
-            conf.write("[http]\n")
-            conf.write("api_password=password\n\n")
-            conf.write("[demo]\n")
+        config_path = os.path.join(config_dir, 'configuration.yaml')
+        try:
+            with open(config_path, 'w') as conf:
+                conf.write("frontend:\n\n")
+                conf.write("discovery:\n\n")
+                conf.write("history:\n\n")
+        except IOError:
+            print(('Fatal Error: No configuration file found and unable '
+                   'to write a default one to {}').format(config_path))
+            sys.exit()
 
-    hass = bootstrap.from_config_file(config_path)
+    return config_path
+
+
+def get_arguments():
+    """ Get parsed passed in arguments. """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-c', '--config',
+        metavar='path_to_config_dir',
+        default="config",
+        help="Directory that contains the Home Assistant configuration")
+    parser.add_argument(
+        '--demo-mode',
+        action='store_true',
+        help='Start Home Assistant in demo mode')
+    parser.add_argument(
+        '--open-ui',
+        action='store_true',
+        help='Open the webinterface in a browser')
+
+    return parser.parse_args()
+
+
+def main():
+    """ Starts Home Assistant. """
+    validate_python()
+    validate_dependencies()
+
+    bootstrap = ensure_path_and_load_bootstrap()
+
+    validate_git_submodules()
+
+    args = get_arguments()
+
+    config_dir = os.path.join(os.getcwd(), args.config)
+    config_path = ensure_config_path(config_dir)
+
+    if args.demo_mode:
+        from homeassistant.components import http, demo
+
+        # Demo mode only requires http and demo components.
+        hass = bootstrap.from_config_dict({
+            http.DOMAIN: {},
+            demo.DOMAIN: {}
+        })
+    else:
+        hass = bootstrap.from_config_file(config_path)
+
+    if args.open_ui:
+        from homeassistant.const import EVENT_HOMEASSISTANT_START
+
+        def open_browser(event):
+            """ Open the webinterface in a browser. """
+            if hass.local_api is not None:
+                import webbrowser
+                webbrowser.open(hass.local_api.base_url)
+
+        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, open_browser)
+
     hass.start()
     hass.block_till_stopped()
 

@@ -1,0 +1,94 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+<link rel="import" href="../bower_components/core-style/core-style.html">
+<link rel="import" href="../bower_components/paper-icon-button/paper-icon-button.html">
+
+<link rel="import" href="./partial-base.html">
+
+<link rel="import" href="../components/state-cards.html">
+
+<polymer-element name="partial-states" attributes="narrow togglePanel filter">
+<template>
+  <core-style ref="ha-animations"></core-style>
+
+  <partial-base narrow="{{narrow}}" togglePanel="{{togglePanel}}">
+    <span header-title>{{headerTitle}}</span>
+
+    <span header-buttons>
+      <paper-icon-button icon="refresh" class="{{isFetching && 'ha-spin'}}"
+        on-click="{{handleRefreshClick}}" hidden?="{{isStreaming}}"></paper-icon-button>
+    </span>
+
+    <state-cards states="{{states}}">
+      <h3>Hi there!</h3>
+      <p>
+        It looks like we have nothing to show you right now. It could be that we have not yet discovered all your devices but it is more likely that you have not configured Home Assistant yet.
+      </p>
+      <p>
+        Please see the <a href='https://home-assistant.io/getting-started/' target='_blank'>Getting Started</a> section on how to setup your devices.
+      </p>
+    </state-cards>
+  </partial-base>
+</template>
+<script>
+  var storeListenerMixIn = window.hass.storeListenerMixIn;
+  var syncActions = window.hass.syncActions;
+  var stateStore = window.hass.stateStore;
+
+  Polymer(Polymer.mixin({
+    headerTitle: "States",
+    states: [],
+    isFetching: false,
+    isStreaming: false,
+
+    attached: function() {
+      this.listenToStores(true);
+    },
+
+    detached: function() {
+      this.stopListeningToStores();
+    },
+
+    stateStoreChanged: function() {
+      this.refreshStates();
+    },
+
+    syncStoreChanged: function(syncStore) {
+      this.isFetching = syncStore.isFetching();
+    },
+
+    streamStoreChanged: function(streamStore) {
+      this.isStreaming = streamStore.isStreaming();
+    },
+
+    filterChanged: function() {
+      this.refreshStates();
+
+      switch (this.filter) {
+        case "group":
+          this.headerTitle = "Groups";
+          break;
+
+        default:
+          this.headerTitle = "States";
+          break;
+      }
+    },
+
+    refreshStates: function() {
+      if (this.filter == 'group') {
+        this.states = _.filter(stateStore.all(), function(state) {
+          return state.domain === 'group';
+        });
+      } else {
+        this.states = _.filter(stateStore.all(), function(state) {
+          return state.domain !== 'group';
+        });
+      }
+    },
+
+    handleRefreshClick: function() {
+      syncActions.fetchAll();
+    },
+  }, storeListenerMixIn));
+</script>
+</polymer>
